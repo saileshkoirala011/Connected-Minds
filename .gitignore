@@ -1,0 +1,47 @@
+# ── Secrets ──────────────────────────────────────────────────────────────────
+.env
+*.pem
+*.key
+
+# ── Virtual environment ───────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── Temporary repo clones (ingest scratch space) ─────────────────────────────
+data/
+!data/.gitkeep
+
+# ── Python bytecode ───────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# ── Build / packaging ─────────────────────────────────────────────────────────
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Test / lint caches ────────────────────────────────────────────────────────
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+
+# ── IDE / OS ──────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ── Node (if a frontend is added later) ──────────────────────────────────────
+node_modules/

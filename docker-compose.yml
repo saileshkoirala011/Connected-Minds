@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+
+  # ── FalkorDB (Redis + graph module) ────────────────────────────────────────
+  falkordb:
+    image: falkordb/falkordb:latest
+    container_name: graphsentinel-falkordb
+    restart: unless-stopped
+    ports:
+      - "6379:6379"     # Redis / FalkorDB Bolt
+      - "3000:3000"     # FalkorDB Browser UI
+    volumes:
+      - falkordb_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── GraphSentinel FastAPI application ──────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: graphsentinel-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    environment:
+      FALKORDB_HOST: "falkordb"
+      FALKORDB_PORT: "6379"
+      FALKORDB_PASSWORD: "${FALKORDB_PASSWORD:-}"
+      FALKORDB_GRAPH: "${FALKORDB_GRAPH:-graphsentinel}"
+      APP_ENV: "${APP_ENV:-development}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      LLM_MODEL: "${LLM_MODEL:-gpt-4o-mini}"
+      OSV_REQUEST_TIMEOUT: "${OSV_REQUEST_TIMEOUT:-15}"
+    depends_on:
+      falkordb:
+        condition: service_healthy
+    volumes:
+      - .:/app    # mount source for live-reload in development
+
+
+volumes:
+  falkordb_data:

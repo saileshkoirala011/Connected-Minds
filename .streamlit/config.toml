@@ -1,0 +1,18 @@
+# .streamlit/config.toml — GraphSentinel Streamlit theme
+# Values come directly from docs/ui-ux-design.md §7.
+
+[theme]
+base                   = "dark"
+primaryColor           = "#7C6CFF"
+backgroundColor        = "#0B0D12"
+secondaryBackgroundColor = "#141822"
+textColor              = "#E6E9F2"
+font                   = "sans serif"
+
+[server]
+# Disable the "View app source" link in production
+enableCORS    = false
+enableXsrfProtection = true
+
+[browser]
+gatherUsageStats = false
