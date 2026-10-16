@@ -42,6 +42,8 @@ def get_graph():
                 host=settings.falkordb_host,
                 port=settings.falkordb_port,
                 password=settings.falkordb_password or None,
+                username=settings.falkordb_username or None,
+                ssl=settings.falkordb_ssl,
             )
             _graph = db.select_graph(settings.falkordb_graph)
             logger.info(

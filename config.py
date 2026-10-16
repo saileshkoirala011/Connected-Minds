@@ -37,8 +37,16 @@ class _Settings:
         return int(os.getenv("FALKORDB_PORT", "6379"))
 
     @property
+    def falkordb_username(self) -> str:
+        return os.getenv("FALKORDB_USERNAME", "")
+
+    @property
     def falkordb_password(self) -> str:
         return os.getenv("FALKORDB_PASSWORD", "")
+
+    @property
+    def falkordb_ssl(self) -> bool:
+        return os.getenv("FALKORDB_SSL", "false").lower() == "true"
 
     @property
     def falkordb_graph(self) -> str:
