@@ -83,7 +83,9 @@ def run_query(cypher: str, params: dict | None = None) -> list[dict]:
     rows: list[dict] = []
     for record in result.result_set:
         row: dict[str, Any] = {}
-        for i, header in enumerate(result.header):
+        for i, header_item in enumerate(result.header):
+            # FalkorDB returns headers as [type_id, name] pairs
+            col_name = header_item[1] if isinstance(header_item, (list, tuple)) else header_item
             val = record[i]
             # Unwrap FalkorDB Node / Edge / Path objects to plain Python types
             if hasattr(val, "properties"):
@@ -91,7 +93,7 @@ def run_query(cypher: str, params: dict | None = None) -> list[dict]:
             elif hasattr(val, "nodes"):
                 # Path — return list of property dicts
                 val = [dict(n.properties) for n in val.nodes]
-            row[header] = val
+            row[col_name] = val
         rows.append(row)
     return rows
 

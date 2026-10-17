@@ -56,10 +56,17 @@ def parse_requirements_txt(path: Path) -> list[Dependency]:
         line = line.split(";")[0].strip()
         # Strip extras:  pkg[extra1,extra2]
         line = re.sub(r"\[.*?\]", "", line)
-        # Strip version specifiers (==, >=, <=, !=, ~=, >, <)
+        # Extract version: prefer == (pinned), fall back to >= or ~=
+        version = ""
+        version_match = re.search(r'==([^\s,;]+)', line)
+        if not version_match:
+            version_match = re.search(r'[>~]=([^\s,;]+)', line)
+        if version_match:
+            version = version_match.group(1).strip()
+        # Strip version specifiers to get the package name
         name = re.split(r"[=<>!~\s]", line)[0].strip()
         if name:
-            deps.append(Dependency(name=name, version="", ecosystem="PyPI"))
+            deps.append(Dependency(name=name, version=version, ecosystem="PyPI"))
     return deps
 
 
@@ -98,3 +105,4 @@ def parse_manifest(path: Path) -> list[Dependency]:
     if parser is None:
         raise ValueError(f"No parser registered for {filename}")
     return parser(path)
+

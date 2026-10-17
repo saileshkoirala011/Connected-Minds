@@ -123,7 +123,7 @@ TOOL_SCHEMAS = [
 ]
 
 
-def ask(question: str, repo: str) -> str:
+def ask(question: str, repo: str) -> tuple[str, dict]:
     """
     Run the agent loop for one question.
 
@@ -132,7 +132,10 @@ def ask(question: str, repo: str) -> str:
         repo:     Repository slug (owner/name) to scope tool calls.
 
     Returns:
-        Final text response from the agent.
+        (answer_text, evidence_dict) where evidence_dict contains:
+            tool_calls: list of {tool, inputs}
+            nodes: total nodes across all tool results
+            edges: total edges across all tool results
 
     Raises:
         AgentError: If the Anthropic API call fails.
@@ -140,13 +143,20 @@ def ask(question: str, repo: str) -> str:
     if not settings.anthropic_api_key:
         raise AgentError("ANTHROPIC_API_KEY is not configured")
 
-    client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    try:
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    except Exception as e:
+        raise AgentError(f"Failed to create Anthropic client: {e}") from e
+
     messages: list[dict] = [
         {"role": "user", "content": question}
     ]
 
     tool_calls_made = 0
     max_calls = settings.agent_max_tool_calls
+    evidence_tool_calls: list[dict] = []
+    evidence_nodes = 0
+    evidence_edges = 0
 
     while True:
         try:
@@ -171,7 +181,8 @@ def ask(question: str, repo: str) -> str:
 
         # If no tool calls, return the text
         if not tool_use_blocks or response.stop_reason == "end_turn":
-            return "\n".join(text_parts) if text_parts else "I could not find relevant data for that question."
+            text = "\n".join(text_parts) if text_parts else "I could not find relevant data for that question."
+            return text, {"tool_calls": evidence_tool_calls, "nodes": evidence_nodes, "edges": evidence_edges}
 
         # Append assistant message
         messages.append({"role": "assistant", "content": response.content})
@@ -204,6 +215,10 @@ def ask(question: str, repo: str) -> str:
             try:
                 result = tool_fn(**inputs)
                 content = json.dumps(result, default=str)
+                # Accumulate evidence
+                evidence_tool_calls.append({"tool": tool_block.name, "inputs": inputs})
+                evidence_nodes += result.get("nodes", 0) if isinstance(result, dict) else 0
+                evidence_edges += result.get("edges", 0) if isinstance(result, dict) else 0
             except ToolError as e:
                 content = json.dumps({"error": str(e)})
             except Exception as e:
@@ -231,8 +246,9 @@ def ask(question: str, repo: str) -> str:
                     system=SYSTEM_PROMPT,
                     messages=messages,
                 )
-                return " ".join(
+                text = " ".join(
                     b.text for b in final.content if b.type == "text"
                 ) or "Tool call limit reached."
+                return text, {"tool_calls": evidence_tool_calls, "nodes": evidence_nodes, "edges": evidence_edges}
             except anthropic.APIError as e:
                 raise AgentError(f"Anthropic API error on final call: {e}") from e

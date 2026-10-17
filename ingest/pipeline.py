@@ -168,17 +168,24 @@ def ingest_repo(url: str) -> dict:
             raise ValueError("Ingest timeout exceeded")
 
         # Build a lookup: normalized_module → relative_file_path
-        # e.g. "click/core.py" → "click.core"
+        # Handles both flat layout (click/core.py → click.core)
+        # and src layout (src/click/core.py → click.core, stripping src/ prefix)
         module_to_path: dict[str, str] = {}
         for f in py_files:
-            file_path = f["path"]  # already forward-slash
-            # strip .py
+            file_path = f["path"]  # forward-slash relative path
             without_ext = file_path[:-3] if file_path.endswith(".py") else file_path
-            # __init__ → package name
             if without_ext.endswith("/__init__"):
                 without_ext = without_ext[: -len("/__init__")]
+            # Strip leading src/ prefix so src-layout imports resolve correctly
+            if without_ext.startswith("src/"):
+                without_ext_no_src = without_ext[4:]
+            else:
+                without_ext_no_src = without_ext
             normalized = without_ext.replace("/", ".")
+            normalized_no_src = without_ext_no_src.replace("/", ".")
             module_to_path[normalized] = file_path
+            if normalized_no_src != normalized:
+                module_to_path[normalized_no_src] = file_path
 
         # Resolve imports to edges
         current_step = "edges"

@@ -199,8 +199,7 @@ with col_chat:
             with st.spinner("Thinking…"):
                 try:
                     from agent import ask, AgentError
-                    answer = ask(question, current_repo)
-                    evidence = st.session_state.get("last_evidence")  # set by tools if wired
+                    answer, evidence = ask(question, current_repo)
                 except AgentError as e:
                     answer = f"⚠️ Agent error: {e}"
                     evidence = None
@@ -256,9 +255,14 @@ with col_graph:
                 st.error(f"Could not load graph data: {e}")
 
         with tab_evidence:
-            ev = st.session_state.get("last_evidence")
-            if ev:
-                st.json(ev)
+            # Show evidence from the most recent assistant message
+            last_ev = None
+            for entry in reversed(st.session_state.get("chat_history", [])):
+                if entry["role"] == "assistant" and entry.get("evidence"):
+                    last_ev = entry["evidence"]
+                    break
+            if last_ev:
+                st.json(last_ev)
             else:
                 st.info("Evidence will appear here after the agent answers a question.")
 
