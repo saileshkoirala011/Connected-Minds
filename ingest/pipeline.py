@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import shutil
 import tempfile
+import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ingest.dependency_parser import ManifestInfo, parse_manifest
 from ingest.graph_writer import GraphWriter
+from ingest.osv_client import OSVClient
 from ingest.repo_parser import RepoParser, clone_repo, validate_github_url, walk_python_files
+from config import settings
 
 
 # ── IngestPipeline (async, for tests) ─────────────────────────────────────
@@ -114,10 +117,13 @@ def ingest_repo(url: str) -> dict:
     owner, name = validate_github_url(url)
     repo = f"{owner}/{name}"
     job_id = str(uuid.uuid4())
-    started_at = datetime.utcnow().isoformat()
+    # Use timezone-aware UTC timestamp to avoid deprecated datetime.utcnow()
+    started_at = datetime.now(timezone.utc).isoformat()
     temp_dir: str | None = None
     current_step = "init"
     writer = GraphWriter()
+    # Track start time to enforce ingest timeout
+    start_time = time.time()
 
     def _update_job(status: str, step: str, error: str = "", finished_at: str = "") -> None:
         try:
@@ -149,6 +155,17 @@ def ingest_repo(url: str) -> dict:
         current_step = "parse"
         _update_job("running", current_step)
         py_files = walk_python_files(root)
+
+        # Repo size check — enforce configured limits
+        total_size = sum(f.stat().st_size for f in root.rglob('*') if f.is_file())
+        if total_size > settings.ingest_repo_size_mb * 1024 * 1024:
+            raise ValueError(f"Repo too large: {total_size // (1024*1024)} MB > {settings.ingest_repo_size_mb} MB")
+        # File count check
+        if len(py_files) > settings.ingest_file_cap:
+            raise ValueError(f"Too many Python files: {len(py_files)} > {settings.ingest_file_cap}")
+        # Timeout check
+        if time.time() - start_time > settings.ingest_timeout_seconds:
+            raise ValueError("Ingest timeout exceeded")
 
         # Build a lookup: normalized_module → relative_file_path
         # e.g. "click/core.py" → "click.core"
@@ -274,8 +291,71 @@ def ingest_repo(url: str) -> dict:
 
         writer.write_package_nodes(repo, unique_pkgs)
 
+        # CALLS edges — resolve function call targets within the repo
+        current_step = "calls"
+        _update_job("running", current_step)
+        fn_name_to_qualnames: dict[str, list[str]] = {}
+        for fn in all_functions:
+            short_name = fn["qualname"].rsplit(".", 1)[-1]
+            fn_name_to_qualnames.setdefault(short_name, []).append(fn["qualname"])
+        calls_list: list[dict] = []
+        for f in py_files:
+            for call in f.get("calls", []):
+                caller = call["caller_qualname"]
+                callee_name = call["callee_name"]
+                resolved_qualnames = fn_name_to_qualnames.get(callee_name, [])
+                if resolved_qualnames:
+                    for rq in resolved_qualnames:
+                        calls_list.append({"caller_qualname": caller, "callee_qualname": rq, "resolved": True})
+        if calls_list:
+            writer.write_calls_edges(repo, calls_list)
+
+        # DEPENDS_ON edges — link Repo to manifest-declared packages
+        current_step = "depends_on"
+        _update_job("running", current_step)
+        if manifest_packages:
+            writer.write_depends_on_edges(repo, manifest_packages)
+
+        # OSV enrichment — look up CVEs for versioned manifest packages
+        current_step = "osv"
+        _update_job("running", current_step)
+        osv_client = OSVClient()
+        packages_for_osv = [p for p in manifest_packages if p.get("version")]
+        vuln_count = 0
+        if packages_for_osv:
+            try:
+                all_vuln_lists = osv_client.query_batch(packages_for_osv)
+                for pkg, vuln_list in zip(packages_for_osv, all_vuln_lists):
+                    if not vuln_list:
+                        continue
+                    vuln_records = []
+                    for v in vuln_list:
+                        aliases = v.get("aliases", [])
+                        affected = v.get("affected", [])
+                        fixed_in = ""
+                        if affected:
+                            ranges = affected[0].get("ranges", [])
+                            if ranges:
+                                events = ranges[0].get("events", [])
+                                for ev in events:
+                                    if "fixed" in ev:
+                                        fixed_in = ev["fixed"]
+                                        break
+                        vuln_records.append({
+                            "id": v.get("id", ""),
+                            "summary": v.get("summary", "")[:200],
+                            "severity": v.get("_severity", "NONE"),
+                            "aliases": aliases,
+                            "fixed_in": fixed_in,
+                            "package_name": pkg["name"],
+                        })
+                    writer.write_vuln_nodes(repo, vuln_records)
+                    vuln_count += len(vuln_records)
+            except Exception:
+                pass  # OSV failure is non-fatal; continue with vuln_count=0
+
         # Mark done
-        finished_at = datetime.utcnow().isoformat()
+        finished_at = datetime.now(timezone.utc).isoformat()
         current_step = "complete"
         _update_job("done", current_step, finished_at=finished_at)
 
@@ -284,11 +364,12 @@ def ingest_repo(url: str) -> dict:
             "function_count": function_count,
             "import_edges": len(unique_edges),
             "packages_written": len(unique_pkgs),
+            "vuln_count": vuln_count,
             "job_id": job_id,
         }
 
     except Exception as exc:
-        finished_at = datetime.utcnow().isoformat()
+        finished_at = datetime.now(timezone.utc).isoformat()
         _update_job("failed", current_step, error=str(exc), finished_at=finished_at)
         raise
 

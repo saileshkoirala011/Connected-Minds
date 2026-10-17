@@ -59,7 +59,7 @@ class _Settings:
 
     @property
     def anthropic_model(self) -> str:
-        return os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+        return os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5")
 
     # ── Agent behaviour ───────────────────────────────────────────────────
     @property

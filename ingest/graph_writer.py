@@ -131,3 +131,41 @@ class GraphWriter:
                 "finished_at": job["finished_at"],
             },
         )
+
+    # ── Vuln nodes ─────────────────────────────────────────────────────────
+
+    def write_vuln_nodes(self, repo: str, vulns: list[dict]) -> None:
+        """MERGE global Vuln nodes and AFFECTS edges to Package scoped to $repo."""
+        for batch in _batched(vulns, BATCH_SIZE):
+            run_query(
+                "UNWIND $vulns AS v "
+                "MERGE (vn:Vuln {id: v.id}) "
+                "SET vn.summary=v.summary, vn.severity=v.severity, "
+                "    vn.aliases=v.aliases, vn.fixed_in=v.fixed_in "
+                "WITH vn, v "
+                "MATCH (pkg:Package {repo: $repo, name: v.package_name}) "
+                "MERGE (vn)-[:AFFECTS]->(pkg)",
+                {"repo": repo, "vulns": batch},
+            )
+
+    def write_depends_on_edges(self, repo: str, packages: list[dict]) -> None:
+        """MERGE DEPENDS_ON edges from Repo to Package for manifest-declared deps."""
+        for batch in _batched(packages, BATCH_SIZE):
+            run_query(
+                "UNWIND $pkgs AS p "
+                "MATCH (r:Repo {repo: $repo}) "
+                "MATCH (pkg:Package {repo: $repo, name: p.name}) "
+                "MERGE (r)-[:DEPENDS_ON]->(pkg)",
+                {"repo": repo, "pkgs": batch},
+            )
+
+    def write_calls_edges(self, repo: str, calls: list[dict]) -> None:
+        """MERGE CALLS edges between Function nodes (best-effort, resolved flag)."""
+        for batch in _batched(calls, BATCH_SIZE):
+            run_query(
+                "UNWIND $calls AS c "
+                "MATCH (caller:Function {repo: $repo, qualname: c.caller_qualname}) "
+                "MATCH (callee:Function {repo: $repo, qualname: c.callee_qualname}) "
+                "MERGE (caller)-[:CALLS {resolved: c.resolved}]->(callee)",
+                {"repo": repo, "calls": batch},
+            )

@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+# GAP 1: add real HTTP query_batch against api.osv.dev/v1/querybatch
+import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+from config import settings
+
 
 # ── Severity label maps ────────────────────────────────────────────────────
 
@@ -78,3 +84,35 @@ class OSVClient:
             vuln["_cvss_score"] = score
             vuln["_severity"] = cvss_to_severity(score)
         return vulns
+
+    BASE_URL = "https://api.osv.dev/v1/querybatch"
+
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8))
+    def query_batch(self, packages: list[dict]) -> list[list[dict]]:
+        """
+        POST to OSV API in batches of 1000 (OSV limit).
+        packages: list of {"name": str, "version": str, "ecosystem": str}
+        Returns: list of vuln lists, one per package in same order as input.
+        Each vuln list is already enriched via self._enrich().
+        """
+        results: list[list[dict]] = []
+        batch_size = 1000
+        for i in range(0, len(packages), batch_size):
+            batch = packages[i:i + batch_size]
+            queries = [
+                {"package": {"name": p["name"], "version": p["version"], "ecosystem": p["ecosystem"]}}
+                for p in batch
+            ]
+            payload = {"queries": queries}
+            with httpx.Client(timeout=settings.osv_timeout_seconds) as client:
+                response = client.post(self.BASE_URL, json=payload)
+                response.raise_for_status()
+            data = response.json()
+            for item in data.get("results", []):
+                vulns = item.get("vulns", [])
+                self._enrich(vulns)
+                results.append(vulns)
+        # Pad with empty lists if API returned fewer results
+        while len(results) < len(packages):
+            results.append([])
+        return results

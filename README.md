@@ -1,198 +1,135 @@
-# 🛡 GraphSentinel
+# 🛡️ GraphSentinel
 
-**AI-powered codebase risk & vulnerability agent**
+**AI-powered code security agent — answers "Which CVEs are reachable?" by traversing a FalkorDB code graph**
 
-GraphSentinel models your project's entire dependency tree as a property graph in [FalkorDB](https://falkordb.com), enriches every package with live CVE data from the [OSV database](https://osv.dev), computes a composite risk score for each node, and lets you interrogate the graph through an LLM agent or MCP tools — all in under a minute.
+GraphSentinel ingests a public Python GitHub repository, builds a property graph of files, functions, imports, calls, packages, and known vulnerabilities, then lets you ask security questions in plain English. The agent chains graph queries and answers only from what it finds — showing you the exact path as proof.
 
----
-
-## Why it matters
-
-Every production codebase carries hundreds of transitive dependencies. Most vulnerability scanners output a flat list of CVEs and leave you to figure out the blast radius, the shortest exploit path, or which 3 packages to upgrade to fix 80% of your exposure. GraphSentinel answers those questions directly.
-
-```
-"Which packages in my repo have CRITICAL CVEs?"
-"What is the blast radius if lodash@4.17.15 is compromised?"
-"Show me the shortest path from my app to urllib3."
-"Rank my top 10 riskiest dependencies."
-```
+**Hackathon:** GraphHacks 2026 · **Track 1:** Agents That Act on Connected Data · **Bonus Track 2:** Agent Memory
 
 ---
 
-## Features
+## Why the graph matters
 
-| Feature | Description |
+A flat CVE scanner tells you *what* is vulnerable. GraphSentinel tells you *whether* it is reachable from your code, *what* would break if you changed a file, and *which* packages to upgrade to fix the most exposure. Remove FalkorDB and the product stops working — the graph is the product.
+
+---
+
+## Graph data model
+
+```
+Repo ─CONTAINS─► File ─DEFINES─► Function ─CALLS─► Function
+  │                │ ▲  IMPORTS (File→File)
+  │                └─USES─► Package ◄─AFFECTS─ Vuln
+  └──────DEPENDS_ON────────► Package
+IngestJob (status per repo)
+```
+
+### Node labels
+
+| Label | Key properties |
 |---|---|
-| **Multi-ecosystem ingestion** | Parses `requirements.txt`, `pyproject.toml`, `package.json`, `pom.xml` |
-| **FalkorDB graph storage** | Idempotent MERGE writes; GraphBLAS-accelerated traversal |
-| **Live CVE enrichment** | Batch-queries OSV API; writes `HAS_VULNERABILITY` edges |
-| **Composite risk scoring** | CVSS + vuln count + blast radius + depth → 0–10 score |
-| **LLM agent** | OpenAI function-calling ReAct loop; heuristic fallback (no key needed) |
-| **MCP server** | 7 tools discoverable by any MCP-aware IDE or LLM host |
-| **REST API** | FastAPI with `/scan`, `/query`, `/report/{pkg}` endpoints |
-| **Rich CLI** | Typer + Rich terminal tables for offline analysis |
+| `Repo` | `repo` (owner/name), `url`, `ingested_at`, `file_count`, `function_count` |
+| `File` | `repo`, `path`, `loc`, `parse_ok` |
+| `Function` | `repo`, `qualname`, `file`, `lineno`, `is_entry` |
+| `Package` | `repo`, `name`, `version`, `ecosystem` |
+| `Vuln` | `id` (CVE/GHSA), `summary`, `severity`, `aliases`, `fixed_in` |
+| `IngestJob` | `id`, `repo`, `status`, `step`, `error`, `started_at`, `finished_at` |
+
+### Edge types
+
+| Edge | From → To | Meaning |
+|---|---|---|
+| `CONTAINS` | Repo → File | repo owns file |
+| `DEFINES` | File → Function | function defined in file |
+| `IMPORTS` | File → File | internal import |
+| `USES` | File → Package | file imports external package |
+| `CALLS` | Function → Function | call edge (best-effort, `resolved` flag) |
+| `DEPENDS_ON` | Repo → Package | listed in manifest |
+| `AFFECTS` | Vuln → Package | vulnerable version range |
 
 ---
 
-## Quick Start
+## Quick start
 
-### Prerequisites
-
-- Docker & Docker Compose
-- Python 3.11+
-
-### 1. Configure
+### Option A: Local with Docker Compose
 
 ```bash
 cp .env.example .env
-# Set OPENAI_API_KEY if you want full LLM analysis (optional)
-```
-
-### 2. Start FalkorDB + API server
-
-```bash
+# Fill in ANTHROPIC_API_KEY (required for chat)
 docker compose up --build
 ```
 
+- Streamlit UI: `http://localhost:8501`
 - FalkorDB Browser: `http://localhost:3000`
-- GraphSentinel API + Swagger UI: `http://localhost:8000/docs`
 
-### 3. Scan a repository
+### Option B: Cloud (FalkorDB Cloud + Streamlit Cloud)
 
-```bash
-# Via REST
-curl -X POST http://localhost:8000/scan \
-  -H "Content-Type: application/json" \
-  -d '{"repo_path": "/path/to/repo", "root_package": "myapp", "root_version": "1.0.0"}'
+1. Create a free cluster at [app.falkordb.cloud](https://app.falkordb.cloud). Copy the host, port, username, and password.
+2. Fork this repo and deploy to [Streamlit Community Cloud](https://streamlit.io/cloud).
+3. In Streamlit Cloud → Settings → Secrets, paste:
 
-# Via CLI (after pip install -r requirements.txt)
-python cli.py scan /path/to/repo --package myapp --version 1.0.0
-```
-
-### 4. Ask questions
-
-```bash
-# Natural-language agent query
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "Which packages have critical CVEs?"}'
-
-# CLI
-python cli.py query "What is the blast radius for requests?"
-python cli.py top-risks --min-score 7.0
-python cli.py report requests
-python cli.py blast-radius requests --version 2.28.0
-python cli.py path myapp urllib3
-```
-
-### 5. Use as an MCP tool source
-
-Point any MCP-aware host at `http://localhost:8000/mcp/manifest` to discover all 7 tools.
-
----
-
-## Project Structure
-
-```
-graphhacks/
-├── app.py                      # FastAPI entry point
-├── agent.py                    # LLM ReAct agent (OpenAI + heuristic fallback)
-├── tools.py                    # 7 FalkorDB-backed agent tools
-├── mcp_server.py               # MCP manifest + call endpoints
-├── cli.py                      # Typer CLI (scan, report, query, top-risks, …)
-│
-├── ingest/
-│   ├── pipeline.py             # Full ingest orchestrator
-│   ├── repo_parser.py          # Locate manifests in a repository
-│   ├── dependency_parser.py    # Parse manifests → Dependency objects
-│   ├── osv_client.py           # OSV API client (sync + async, CVSS enrichment)
-│   ├── graph_writer.py         # Idempotent FalkorDB writer
-│   └── risk_scorer.py          # Composite risk scoring (CVSS-weighted)
-│
-├── queries.cypher              # Reference Cypher queries
-├── tests/
-│   ├── test_tools.py           # Graph tool unit tests (mocked FalkorDB)
-│   └── test_pipeline.py        # Pipeline + scorer unit tests
-│
-├── docs/
-│   ├── architecture.md         # System design & component overview
-│   └── graph-schema.md         # Node/edge schema + risk score formula
-│
-├── docker-compose.yml          # FalkorDB + app (one-command local stack)
-├── .env.example                # Environment variable template
-├── requirements.txt            # Pinned Python dependencies
-└── README.md
+```toml
+FALKORDB_HOST = "your-cluster.falkordb.cloud"
+FALKORDB_PORT = "6379"
+FALKORDB_USERNAME = "your-username"
+FALKORDB_PASSWORD = "your-password"
+FALKORDB_SSL = "true"
+FALKORDB_GRAPH = "graphsentinel"
+ANTHROPIC_API_KEY = "sk-ant-..."
+ANTHROPIC_MODEL = "claude-sonnet-4-5"
 ```
 
 ---
 
-## API Reference
-
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/health` | Liveness probe |
-| `POST` | `/scan` | Trigger full ingest + vulnerability + scoring pass |
-| `POST` | `/query` | Natural-language agent query |
-| `GET` | `/report/{package}` | Risk report: deps, CVEs, score, blast radius |
-| `GET` | `/mcp/manifest` | MCP tool discovery manifest |
-| `POST` | `/mcp/call` | Invoke a named MCP tool |
-
-Full interactive docs at `http://localhost:8000/docs`.
-
----
-
-## CLI Reference
+## CLI reference
 
 ```
-python cli.py scan PATH --package NAME --version VER   Ingest a repository
-python cli.py report PACKAGE [--version VER]           Risk report for a package
-python cli.py query "PROMPT"                           Ask the agent
-python cli.py top-risks [--min-score N] [--limit N]   List riskiest packages
-python cli.py blast-radius PACKAGE [--version VER]    Upstream exposure
-python cli.py path SOURCE TARGET                       Shortest dependency path
+# Check database connection
+python cli.py health
+
+# Ingest a public repo
+python cli.py ingest https://github.com/pallets/click
+
+# Repo summary (files, functions, packages, CVEs)
+python cli.py summary pallets/click
+
+# Most-imported files (structural hotspots)
+python cli.py top pallets/click
+
+# Blast radius of a file
+python cli.py blast pallets/click src/click/core.py
+
+# Files in circular import chains
+python cli.py cycles pallets/click
 ```
 
 ---
 
-## Risk Score
+## Ingest pipeline
 
-```
-score = 0.50 × CVSS_norm
-      + 0.20 × log_scale(vuln_count,  cap=20)
-      + 0.20 × blast_radius_norm(     cap=100)
-      + 0.10 × depth_norm(            cap=10)
-```
-
-| Score | Label |
-|---|---|
-| 9.0 – 10.0 | CRITICAL |
-| 7.0 – 8.9 | HIGH |
-| 4.0 – 6.9 | MEDIUM |
-| 0.1 – 3.9 | LOW |
-| 0.0 | NONE |
+1. Validate URL (`https://github.com/<owner>/<repo>`)
+2. `git clone --depth 1` into a temp dir; enforce size and time limits
+3. Walk `.py` files, parse with `ast`: defs, imports, calls
+4. Resolve internal imports to IMPORTS edges; external to Package nodes
+5. Parse `requirements.txt` / `pyproject.toml` for declared deps
+6. Write Repo, File, Function, Package nodes and CONTAINS/DEFINES/IMPORTS/USES edges
+7. Resolve intra-repo function calls → CALLS edges
+8. Write DEPENDS_ON edges from Repo to manifest packages
+9. Query [OSV API](https://google.github.io/osv.dev/api/) in batches → write Vuln nodes + AFFECTS edges
+10. Mark `IngestJob` done; delete temp dir
 
 ---
 
-## Development
+## AI-use disclosure
 
-```bash
-# Install dependencies
-pip install -r requirements.txt
-
-# Run tests (no live DB required — all graph calls are mocked)
-pytest tests/ -v
-
-# Lint
-ruff check .
-ruff format --check .
-```
+This project was built with AI coding assistance (Kiro/Claude). All Cypher queries, architecture decisions, and graph schema were designed by the team; AI assisted with implementation.
 
 ---
 
 ## Docs
 
 - [Architecture](docs/architecture.md)
-- [Graph Schema](docs/graph-schema.md)
-- [Cypher Query Reference](queries.cypher)
-- [FalkorDB Docs](https://docs.falkordb.com)
+- [Backend schema](docs/backend-schema.md)
+- [Cypher query reference](queries.cypher)
+- [FalkorDB docs](https://docs.falkordb.com)
 - [OSV API](https://google.github.io/osv.dev/api/)
