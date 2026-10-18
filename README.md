@@ -9,15 +9,6 @@
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Streamlit](https://img.shields.io/badge/UI-Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)
 
-## Screenshots
-
-### 💬 Chat View
-![Chat view](docs/screenshots/chatviewe.png)
-
-### 📊 Graph View
-![Graph view](docs/screenshots/graphs.png)
-
-</div>
 ![Gemini](https://img.shields.io/badge/LLM-Gemini-4285F4?style=for-the-badge&logo=google&logoColor=white)
 ![OSV](https://img.shields.io/badge/Vulns-OSV.dev-green?style=for-the-badge)
 
@@ -52,9 +43,7 @@ A flat CVE scanner tells you **what** is vulnerable. GraphSentinel tells you **w
 
 | Chat + Evidence | Graph View |
 |---|---|
-| ![Chat](docs/screenshots/chat.png) | ![Graph](docs/screenshots/graph.png) |
-
-> 📌 Add your screenshots to `docs/screenshots/` (`chat.png`, `graph.png`).
+| ![Chat](docs/screenshots/chatviewe.png) | ![Graph](docs/screenshots/graphs.png) |
 
 ---
 
