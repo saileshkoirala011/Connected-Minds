@@ -54,6 +54,13 @@ for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
+# 4f. Create indexes at startup
+try:
+    from queries import create_indexes
+    create_indexes()
+except Exception:
+    pass
+
 # ── Custom CSS ────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
@@ -90,23 +97,23 @@ with st.sidebar:
     )
     ingest_btn = st.button("🔍 Ingest Repo", use_container_width=True, type="primary")
 
+    # 4a. Replace spinner with st.status() progress during ingest
     if ingest_btn and repo_url:
-        with st.spinner("Cloning and analysing repository…"):
+        result = None
+        with st.status("Ingesting repository...", expanded=True) as status:
+            st.write("Cloning and parsing repository...")
             try:
                 from ingest.pipeline import ingest_repo
                 result = ingest_repo(repo_url)
-                st.session_state["ingest_result"] = result
-                st.session_state["selected_repo"] = None  # reset so dropdown reloads
-                st.success(
-                    f"✅ Done: {result['file_count']} files, "
-                    f"{result['function_count']} functions, "
-                    f"{result['import_edges']} imports, "
-                    f"{result.get('vuln_count', 0)} CVEs"
-                )
+                st.write(f"✅ {result['file_count']} files · {result['function_count']} functions · {result['import_edges']} import edges · {result.get('vuln_count', 0)} CVEs")
+                status.update(label="Ingest complete!", state="complete")
             except ValueError as e:
-                st.error(f"Ingest failed: {e}")
+                status.update(label=f"Ingest failed: {e}", state="error")
             except Exception as e:
-                st.error(f"Ingest error: {e}")
+                status.update(label=f"Ingest error: {e}", state="error")
+        if result is not None:
+            st.session_state["ingest_result"] = result
+            st.session_state["selected_repo"] = None
     elif ingest_btn:
         st.warning("Please enter a GitHub URL.")
 
@@ -146,6 +153,8 @@ with st.sidebar:
                 col1.metric("Packages", stats.get("package_count", 0))
                 col2.metric("CVEs", stats.get("vuln_count", 0))
                 st.caption(f"Entry points: {ep}")
+                # 4b. Show ingested_at date
+                st.caption(f"Ingested: {stats.get('ingested_at','')[:10]}")
             except Exception:
                 pass
     else:
@@ -158,12 +167,13 @@ with col_chat:
     current_repo = st.session_state.get("selected_repo")
 
     if not current_repo:
-        # Empty state
+        # 4d. Better empty state
         st.markdown("## 🛡️ GraphSentinel")
-        st.markdown("Paste a public Python repository URL in the sidebar to begin.")
-        st.markdown("**Example questions** (available after ingesting a repo):")
-        for q in EXAMPLE_QUESTIONS:
-            st.markdown(f"- *{q}*")
+        st.markdown("**Paste a public GitHub Python repo URL in the sidebar to begin.**")
+        st.markdown("---")
+        cols = st.columns(2)
+        for i, q in enumerate(EXAMPLE_QUESTIONS):
+            cols[i % 2].info(q)
     else:
         st.markdown(f"### 💬 Chat — `{current_repo}`")
 
@@ -184,9 +194,15 @@ with col_chat:
                 with st.chat_message("assistant"):
                     st.markdown(entry["content"])
                     if entry.get("evidence"):
+                        # 4e. Evidence expander — show tool calls
                         with st.expander("🔍 How I got this"):
                             ev = entry["evidence"]
-                            st.caption(f"Cypher: `{ev.get('cypher', '')}` | Nodes: {ev.get('nodes', 0)} | Edges: {ev.get('edges', 0)}")
+                            if ev.get("tool_calls"):
+                                st.markdown("**Tools called:**")
+                                for tc in ev["tool_calls"]:
+                                    args = ", ".join(f"{k}={v!r}" for k, v in tc.get("inputs", {}).items() if k != "repo")
+                                    st.code(f"{tc['tool']}({args})", language="python")
+                            st.caption(f"Nodes touched: {ev.get('nodes', 0)} · Edges: {ev.get('edges', 0)}")
 
         # Chat input
         pending = st.session_state.pop("_pending_question", None)
@@ -238,6 +254,48 @@ with col_graph:
                     st.info("No files ingested yet.")
 
                 top_files = most_imported_files(current_repo, limit=10)
+
+                # 4c. Interactive pyvis graph (capped at 60 nodes)
+                try:
+                    from pyvis.network import Network
+                    import streamlit.components.v1 as components
+
+                    edge_rows = run_query(
+                        "MATCH (a:File {repo: $repo})-[:IMPORTS]->(b:File {repo: $repo}) RETURN a.path AS src, b.path AS dst",
+                        {"repo": current_repo},
+                    )
+                    if edge_rows:
+                        # Collect unique nodes, cap at 60
+                        node_set: set[str] = set()
+                        capped_edges = []
+                        for er in edge_rows:
+                            if len(node_set) >= 60 and er["src"] not in node_set and er["dst"] not in node_set:
+                                continue
+                            node_set.add(er["src"])
+                            node_set.add(er["dst"])
+                            capped_edges.append(er)
+
+                        # Top 3 hotspots are red; others are purple
+                        hotspot_paths = {r["path"] for r in (top_files or [])[:3]}
+
+                        net = Network(height="380px", width="100%", bgcolor="#141822", font_color="#E6E9F2", directed=True)
+                        net.set_options('{"edges": {"arrows": {"to": {"enabled": true}}}, "physics": {"stabilization": {"iterations": 100}}}')
+                        for node in node_set:
+                            color = "#FF5C6C" if node in hotspot_paths else "#7C6CFF"
+                            label = node.split("/")[-1]  # show just filename
+                            net.add_node(node, label=label, title=node, color=color, shape="dot", size=12)
+                        for er in capped_edges:
+                            net.add_edge(er["src"], er["dst"], color="#4DA3FF", width=1)
+
+                        html_str = net.generate_html()
+                        components.html(html_str, height=400, scrolling=False)
+                        if len(all_files) > 60:
+                            st.caption(f"Showing 60 of {len(all_files)} nodes. Purple = file node, Red = top hotspot.")
+                        else:
+                            st.caption("Purple = file node, Red = top hotspot (most imported).")
+                except Exception as pyvis_err:
+                    st.caption(f"Interactive graph unavailable: {pyvis_err}")
+
                 cycles = find_circular_imports(current_repo, limit=10)
                 vulns = list_vulnerabilities(current_repo, limit=10)
 
