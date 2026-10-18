@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 
+from config import settings
 from tools import TOOLS, ToolError
 from gemini_client import GeminiClient
 
