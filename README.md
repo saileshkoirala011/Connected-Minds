@@ -20,6 +20,14 @@
 
 ---
 
+## 🖼️ Screenshots
+
+| 💬 Chat View | 📊 Graph View |
+|:---:|:---:|
+| ![Chat view](docs/screenshots/chat.png) | ![Graph view](docs/screenshots/graph.png) |
+
+---
+
 ## ✨ What it does
 
 Paste a public Python GitHub repo URL. GraphSentinel:
