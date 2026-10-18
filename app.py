@@ -220,8 +220,10 @@ with col_chat:
                     err = str(e)
                     if "credit balance is too low" in err or "upgrade or purchase credits" in err:
                         answer = "⚠️ Anthropic API credits are empty. Add credits at https://console.anthropic.com/settings/billing then retry."
-                    elif "ANTHROPIC_API_KEY is not configured" in err:
-                        answer = "⚠️ ANTHROPIC_API_KEY is not set in .env."
+                    elif "ANTHROPIC_API_KEY is not configured" in err or "GEMINI_API_KEY is not configured" in err:
+                        answer = "⚠️ API key is not set in .env or Streamlit secrets."
+                    elif "429" in err or "quota" in err.lower() or "rate" in err.lower():
+                        answer = "⚠️ Gemini API rate limit hit. Wait a minute and try again, or swap to a fresh API key in Settings → Secrets."
                     else:
                         answer = f"⚠️ Agent error: {e}"
                     evidence = None
