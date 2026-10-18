@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import os
 
 import anthropic
 
 from config import settings
 from tools import TOOLS, ToolError
+from gemini_client import GeminiClient
 
 
 class AgentError(Exception):
@@ -140,13 +142,13 @@ def ask(question: str, repo: str) -> tuple[str, dict]:
     Raises:
         AgentError: If the Anthropic API call fails.
     """
-    if not settings.anthropic_api_key:
-        raise AgentError("ANTHROPIC_API_KEY is not configured")
+    if not settings.anthropic_api_key and not os.getenv("GEMINI_API_KEY"):
+        raise AgentError("No LLM API key configured. Set ANTHROPIC_API_KEY or GEMINI_API_KEY in .env")
 
     try:
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        client = GeminiClient()
     except Exception as e:
-        raise AgentError(f"Failed to create Anthropic client: {e}") from e
+        raise AgentError(f"Failed to create client: {e}") from e
 
     messages: list[dict] = [
         {"role": "user", "content": question}
@@ -167,7 +169,7 @@ def ask(question: str, repo: str) -> tuple[str, dict]:
                 tools=TOOL_SCHEMAS,
                 messages=messages,
             )
-        except anthropic.APIError as e:
+        except Exception as e:
             raise AgentError(f"Anthropic API error: {e}") from e
 
         # Collect text and tool use blocks
@@ -250,5 +252,5 @@ def ask(question: str, repo: str) -> tuple[str, dict]:
                     b.text for b in final.content if b.type == "text"
                 ) or "Tool call limit reached."
                 return text, {"tool_calls": evidence_tool_calls, "nodes": evidence_nodes, "edges": evidence_edges}
-            except anthropic.APIError as e:
-                raise AgentError(f"Anthropic API error on final call: {e}") from e
+            except Exception as e:
+                raise AgentError(f"API error on final call: {e}") from e
