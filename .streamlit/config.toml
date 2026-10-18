@@ -10,8 +10,6 @@ textColor              = "#E6E9F2"
 font                   = "sans serif"
 
 [server]
-# Disable the "View app source" link in production
-enableCORS    = false
 enableXsrfProtection = true
 
 [browser]
