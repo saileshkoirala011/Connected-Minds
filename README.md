@@ -47,14 +47,6 @@ A flat CVE scanner tells you **what** is vulnerable. GraphSentinel tells you **w
 
 ---
 
-## 🖼️ Screenshots
-
-| Chat + Evidence | Graph View |
-|---|---|
-| ![Chat](docs/screenshots/chatviewe.png) | ![Graph](docs/screenshots/graphs.png) |
-
----
-
 ## 🧬 Graph data model
 
 ```mermaid
@@ -217,7 +209,7 @@ flowchart LR
 
 | | |
 |---|---|
-| 🌐 **Live app** | `https://connected-minds-fjque54tdzeba78jysc54d.streamlit.app/` |
+| 🌐 **Live app** | [GraphSentinel on Streamlit](https://connected-minds-fjque54tdzeba78jysc54d.streamlit.app/) |
 | 🎬 **Demo video** | [Watch on OneDrive](https://1drv.ms/v/c/1aa180e5e002f2c6/IQD5-4TRl99cSJhhrocyxs2wAXgQF8vQwOYM3WWgTnw6Ovw?e=KuKkEZ) |
 | 📦 **Repository** | https://github.com/saileshkoirala011/Connected-Minds |
 
