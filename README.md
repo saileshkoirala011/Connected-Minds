@@ -210,7 +210,7 @@ flowchart LR
 | | |
 |---|---|
 | 🌐 **Live app** | `https://connected-minds-fjque54tdzeba78jysc54d.streamlit.app/` |
-| 🎬 **Demo video** | `https://YOUR-VIDEO-LINK` |
+| 🎬 **Demo video** | [Watch on OneDrive](https://1drv.ms/v/c/1aa180e5e002f2c6/IQD5-4TRl99cSJhhrocyxs2wAXgQF8vQwOYM3WWgTnw6Ovw?e=KuKkEZ) |
 | 📦 **Repository** | https://github.com/saileshkoirala011/Connected-Minds |
 
 ---
