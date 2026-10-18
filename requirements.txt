@@ -1,40 +1,40 @@
-﻿# GraphSentinel — Python dependencies
-# Pinned to exact versions for reproducible installs (rules.md §2).
+# GraphSentinel � Python dependencies
+# Pinned to exact versions for reproducible installs (rules.md �2).
 # Install: pip install -r requirements.txt
 
-# ── Graph database ────────────────────────────────────────────────────────────
-falkordb==1.0.11
+# -- Graph database ------------------------------------------------------------
+falkordb>=1.2.0
 
-# ── UI ────────────────────────────────────────────────────────────────────────
-streamlit==1.39.0
+# -- UI ------------------------------------------------------------------------
+streamlit>=1.50
 pyvis==0.3.2
 
-# ── LLM (Anthropic SDK — rules.md §1) ────────────────────────────────────────
+# -- LLM (Anthropic SDK � rules.md �1) ----------------------------------------
 anthropic==0.34.2
 
-# ── HTTP client ───────────────────────────────────────────────────────────────
+# -- HTTP client ---------------------------------------------------------------
 httpx==0.27.2
 
-# ── Retries (OSV + LLM calls — rules.md §4) ──────────────────────────────────
+# -- Retries (OSV + LLM calls � rules.md �4) ----------------------------------
 tenacity==9.0.0
 
-# ── Config / env ─────────────────────────────────────────────────────────────
+# -- Config / env -------------------------------------------------------------
 python-dotenv==1.0.1
 
-# ── TOML parsing (Python < 3.11 fallback) ─────────────────────────────────────
+# -- TOML parsing (Python < 3.11 fallback) -------------------------------------
 tomli==2.0.2; python_version < "3.11"
 
-# ── CLI (terminal runner) ─────────────────────────────────────────────────────
+# -- CLI (terminal runner) -----------------------------------------------------
 typer==0.12.5
 rich==13.9.4
 
-# ── Testing ───────────────────────────────────────────────────────────────────
+# -- Testing -------------------------------------------------------------------
 pytest==8.3.3
 pytest-asyncio==0.24.0
 pytest-mock==3.14.0
 
-# ── Linting ───────────────────────────────────────────────────────────────────
+# -- Linting -------------------------------------------------------------------
 ruff==0.6.9
 
-# ── MCP SDK (stretch goal — rules.md §1) ─────────────────────────────────────
+# -- MCP SDK (stretch goal � rules.md �1) -------------------------------------
 # mcp==1.0.0

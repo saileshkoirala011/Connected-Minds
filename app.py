@@ -217,7 +217,13 @@ with col_chat:
                     from agent import ask, AgentError
                     answer, evidence = ask(question, current_repo)
                 except AgentError as e:
-                    answer = f"⚠️ Agent error: {e}"
+                    err = str(e)
+                    if "credit balance is too low" in err or "upgrade or purchase credits" in err:
+                        answer = "⚠️ Anthropic API credits are empty. Add credits at https://console.anthropic.com/settings/billing then retry."
+                    elif "ANTHROPIC_API_KEY is not configured" in err:
+                        answer = "⚠️ ANTHROPIC_API_KEY is not set in .env."
+                    else:
+                        answer = f"⚠️ Agent error: {e}"
                     evidence = None
                 except Exception as e:
                     answer = f"⚠️ Error: {e}"
