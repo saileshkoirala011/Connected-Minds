@@ -1,30 +1,68 @@
+<div align="center">
+
 # 🛡️ GraphSentinel
 
-**AI-powered code security agent — answers "Which CVEs are reachable?" by traversing a FalkorDB code graph**
+### Ask your codebase *"Which CVEs are actually reachable?"*
+**An AI security agent that answers by walking a FalkorDB code graph, and shows the path as proof.**
 
-GraphSentinel ingests a public Python GitHub repository, builds a property graph of files, functions, imports, calls, packages, and known vulnerabilities, then lets you ask security questions in plain English. The agent chains graph queries and answers only from what it finds — showing you the exact path as proof.
+![FalkorDB](https://img.shields.io/badge/Graph%20DB-FalkorDB-red?style=for-the-badge)
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Streamlit](https://img.shields.io/badge/UI-Streamlit-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)
+![Gemini](https://img.shields.io/badge/LLM-Gemini-4285F4?style=for-the-badge&logo=google&logoColor=white)
+![OSV](https://img.shields.io/badge/Vulns-OSV.dev-green?style=for-the-badge)
 
-**Hackathon:** GraphHacks 2026 · **Track 1:** Agents That Act on Connected Data · **Bonus Track 2:** Agent Memory
+**🏆 GraphHacks 2026** · Track 1: *Agents That Act on Connected Data* · Bonus: Track 2 *Agent Memory*
+
+[🚀 Live Demo](#-live-demo) · [🎬 Demo Video](#-live-demo) · [🧬 Graph Model](#-graph-data-model) · [🔎 Cypher Queries](queries.cypher) · [⚡ Quick Start](#-quick-start)
+
+</div>
 
 ---
 
-## Why the graph matters
+## ✨ What it does
 
-A flat CVE scanner tells you *what* is vulnerable. GraphSentinel tells you *whether* it is reachable from your code, *what* would break if you changed a file, and *which* packages to upgrade to fix the most exposure. Remove FalkorDB and the product stops working — the graph is the product.
+Paste a public Python GitHub repo URL. GraphSentinel:
+
+1. **Ingests** it, parsing every file, function, import and call with `ast`
+2. **Builds a property graph** in FalkorDB: files, functions, packages, and known vulnerabilities (OSV.dev)
+3. **Answers plain-English security questions** by chaining graph queries as agent tools, answering *only* from what the graph returns
+4. **Shows its work**: the graph view, the evidence, and the exact Cypher behind every answer
+
+> 💬 *"Which files are most imported?"* · *"What breaks if I change `core.py`?"* · *"Are there circular imports?"* · *"Which vulnerabilities are reachable?"* · *"How does `cli.py` connect to `core.py`?"*
+
+## 🎯 Why the graph matters
+
+A flat CVE scanner tells you **what** is vulnerable. GraphSentinel tells you **whether it's reachable from your code**, **what breaks if you change a file**, and **which package upgrade removes the most exposure**.
+
+**Remove FalkorDB and the product stops working. The graph *is* the product.**
 
 ---
 
-## Graph data model
+## 🖼️ Screenshots
 
-```
-Repo ─CONTAINS─► File ─DEFINES─► Function ─CALLS─► Function
-  │                │ ▲  IMPORTS (File→File)
-  │                └─USES─► Package ◄─AFFECTS─ Vuln
-  └──────DEPENDS_ON────────► Package
-IngestJob (status per repo)
+| Chat + Evidence | Graph View |
+|---|---|
+| ![Chat](docs/screenshots/chat.png) | ![Graph](docs/screenshots/graph.png) |
+
+> 📌 Add your screenshots to `docs/screenshots/` (`chat.png`, `graph.png`).
+
+---
+
+## 🧬 Graph data model
+
+```mermaid
+graph LR
+    Repo -- CONTAINS --> File
+    File -- DEFINES --> Function
+    Function -- CALLS --> Function
+    File -- IMPORTS --> File
+    File -- USES --> Package
+    Repo -- DEPENDS_ON --> Package
+    Vuln -- AFFECTS --> Package
 ```
 
-### Node labels
+<details>
+<summary><b>📋 Node labels</b></summary>
 
 | Label | Key properties |
 |---|---|
@@ -35,7 +73,10 @@ IngestJob (status per repo)
 | `Vuln` | `id` (CVE/GHSA), `summary`, `severity`, `aliases`, `fixed_in` |
 | `IngestJob` | `id`, `repo`, `status`, `step`, `error`, `started_at`, `finished_at` |
 
-### Edge types
+</details>
+
+<details>
+<summary><b>🔗 Edge types</b></summary>
 
 | Edge | From → To | Meaning |
 |---|---|---|
@@ -47,43 +88,66 @@ IngestJob (status per repo)
 | `DEPENDS_ON` | Repo → Package | listed in manifest |
 | `AFFECTS` | Vuln → Package | vulnerable version range |
 
-See [`queries.cypher`](queries.cypher) for every Cypher query the product depends on.
+</details>
+
+📄 Every Cypher query the product depends on is in [`queries.cypher`](queries.cypher).
 
 ---
 
-## Quick start
+## 🤖 Agent tools
 
-### Option A: Local with Docker Compose
+The LLM never touches the database directly. It calls **8 read-only graph tools** (`tools.py`), each backed by a parameterised Cypher query:
+
+| Tool | Question it answers |
+|---|---|
+| `get_repo_summary` | How big is this repo? (files, functions, packages, CVEs) |
+| `most_imported` | Which files are most depended on? |
+| `find_dependents` | What breaks if I change this file? (blast radius) |
+| `find_dependencies` | What does this file rely on? |
+| `find_cycles` | Are there circular imports? |
+| `list_vulns` | Which vulnerabilities affect this repo? |
+| `reachable_vulns` | Which vulns are reachable via call/import paths? |
+| `explain_path` | How does file A connect to file B? |
+
+---
+
+## ⚡ Quick start
+
+<details open>
+<summary><b>Option A: Docker Compose</b></summary>
 
 ```bash
-cp .env.example .env
-# Fill in GEMINI_API_KEY and FalkorDB credentials
+cp .env.example .env        # fill in GEMINI_API_KEY and FalkorDB credentials
 docker compose up --build
 ```
+- Streamlit UI: http://localhost:8501
+- FalkorDB Browser: http://localhost:3000
 
-- Streamlit UI: `http://localhost:8501`
-- FalkorDB Browser: `http://localhost:3000`
+</details>
 
-### Option B: Local without Docker
+<details>
+<summary><b>Option B: Local (no Docker)</b></summary>
 
 ```bash
-cp .env.example .env
-# Fill in credentials (see .env.example)
+cp .env.example .env        # fill in credentials
 pip install -r requirements.txt
-python cli.py health          # confirm DB connection
+python cli.py health        # confirm DB connection
 python cli.py ingest https://github.com/pallets/click
 python -m streamlit run app.py
 ```
 
-### Option C: Streamlit Cloud
+</details>
+
+<details>
+<summary><b>Option C: Streamlit Cloud</b></summary>
 
 1. Fork this repo
-2. Deploy at [share.streamlit.io](https://share.streamlit.io) → point to `app.py`
-3. In **Settings → Secrets**, paste:
+2. Deploy at [share.streamlit.io](https://share.streamlit.io) and point it to `app.py`
+3. In **Settings → Secrets** add:
 
 ```toml
 FALKORDB_HOST = "your-cloud-host"
-FALKORDB_PORT = "65405"
+FALKORDB_PORT = "your-port"
 FALKORDB_USERNAME = "your-username"
 FALKORDB_PASSWORD = "your-password"
 FALKORDB_SSL = "false"
@@ -92,69 +156,86 @@ GEMINI_API_KEY = "your-gemini-key"
 GEMINI_MODEL = "gemini-flash-latest"
 ```
 
----
+</details>
 
-## CLI reference
+### 🖥️ CLI
 
 ```bash
-python cli.py health                                    # check DB connection
-python cli.py ingest https://github.com/pallets/click  # ingest a repo
-python cli.py summary pallets/click                    # file/function/CVE counts
-python cli.py top --repo pallets/click                 # most-imported files
-python cli.py blast src/click/core.py --repo pallets/click  # blast radius
-python cli.py cycles --repo pallets/click              # circular imports
-python cli.py repos                                    # list all ingested repos
+python cli.py health                                         # check DB connection
+python cli.py ingest https://github.com/pallets/click        # ingest a repo
+python cli.py summary pallets/click                          # file / function / CVE counts
+python cli.py top --repo pallets/click                       # most-imported files
+python cli.py blast src/click/core.py --repo pallets/click   # blast radius
+python cli.py cycles --repo pallets/click                    # circular imports
+python cli.py repos                                          # list ingested repos
 ```
 
 ---
 
-## Ingest pipeline
+## 🔄 Ingest pipeline
 
-1. Validate URL (`https://github.com/<owner>/<repo>`)
-2. `git clone --depth 1` into a temp dir; enforce size and time limits
-3. Walk `.py` files, parse with `ast`: defs, imports, calls
-4. Resolve internal imports → IMPORTS edges; external → Package nodes
-5. Parse `requirements.txt` / `package.json` for declared deps
-6. Write Repo, File, Function, Package nodes and CONTAINS/DEFINES/IMPORTS/USES edges
-7. Resolve intra-repo function calls → CALLS edges (best-effort)
-8. Write DEPENDS_ON edges from Repo to manifest packages
-9. Query [OSV API](https://google.github.io/osv.dev/api/) in batches → write Vuln nodes + AFFECTS edges
-10. Mark `IngestJob` done; delete temp dir
+```mermaid
+flowchart LR
+    A[GitHub URL] --> B[git clone --depth 1]
+    B --> C[Parse .py with ast]
+    C --> D[Resolve imports and calls]
+    D --> E[(FalkorDB<br/>MERGE nodes + edges)]
+    F[OSV.dev API] --> E
+    E --> G[Agent + Streamlit UI]
+```
+
+1. Validate the URL and clone shallowly, enforcing size and time limits
+2. Parse defs, imports and calls with `ast`
+3. Write `Repo`, `File`, `Function`, `Package` nodes and `CONTAINS` / `DEFINES` / `IMPORTS` / `USES` edges (idempotent `MERGE`)
+4. Resolve intra-repo calls into `CALLS` edges (best-effort)
+5. Read `requirements.txt` / `package.json` into `DEPENDS_ON` edges
+6. Query [OSV](https://google.github.io/osv.dev/api/) in batches and write `Vuln` nodes plus `AFFECTS` edges
 
 ---
 
-## Stack
+## 🧰 Tech stack
 
 | Concern | Choice |
 |---|---|
-| Graph database | FalkorDB (primary and only datastore) |
-| UI | Streamlit |
-| LLM | Google Gemini via `gemini_client.py` adapter |
+| Graph database | **FalkorDB** (primary and only datastore) |
+| UI | Streamlit + pyvis |
+| LLM | Google Gemini via the `gemini_client.py` adapter |
 | Vulnerability data | OSV.dev API |
 | Parsing | Python stdlib `ast` |
 | HTTP | `httpx` with retries |
-| Config | `python-dotenv` |
 
 ---
 
-## AI-use disclosure
+## 🚀 Live demo
 
-This project was built with AI coding assistance (Kiro IDE, powered by Claude/Anthropic). All Cypher queries, the graph schema, and architectural decisions were designed by the team. AI assisted with implementation, debugging, and code generation. The Gemini adapter (`gemini_client.py`) was provided as part of the development process. All generated code was reviewed and tested before use.
-
----
-
-## Known limitations
-
-- Python call resolution is approximate (dynamic dispatch, decorators, reflection not supported)
-- Reachability via CALLS edges is labelled "best-effort" — not proof of exploitability
-- CVE enrichment requires versioned dependencies in `requirements.txt`; libraries without version pins show 0 CVEs
+| | |
+|---|---|
+| 🌐 **Live app** | `https://YOUR-APP.streamlit.app` |
+| 🎬 **Demo video** | `https://YOUR-VIDEO-LINK` |
+| 📦 **Repository** | https://github.com/saileshkoirala011/Connected-Minds |
 
 ---
 
-## Docs
+## ⚠️ Known limitations
 
-- [Architecture](docs/architecture.md)
-- [Backend schema](docs/backend-schema.md)
-- [Cypher query reference](queries.cypher)
-- [FalkorDB docs](https://docs.falkordb.com)
-- [OSV API](https://google.github.io/osv.dev/api/)
+- Python call resolution is approximate (dynamic dispatch, decorators and reflection are not supported)
+- Reachability via `CALLS` edges is **best-effort**, not proof of exploitability
+- CVE enrichment needs versioned dependencies; libraries without version pins show 0 CVEs
+
+---
+
+## 🤝 AI-use disclosure
+
+This project was built with AI coding assistance (Kiro IDE, powered by Claude/Anthropic). All Cypher queries, the graph schema and architectural decisions were designed by the team. AI assisted with implementation, debugging and code generation. The runtime agent uses Google Gemini through `gemini_client.py`. All generated code was reviewed and tested before use.
+
+---
+
+## 📚 Docs
+
+[Architecture](docs/architecture.md) · [Backend schema](docs/backend-schema.md) · [PRD](docs/prd.md) · [Cypher queries](queries.cypher) · [FalkorDB docs](https://docs.falkordb.com) · [OSV API](https://google.github.io/osv.dev/api/)
+
+<div align="center">
+
+**Built for GraphHacks 2026 · Powered by FalkorDB** 🛡️
+
+</div>
