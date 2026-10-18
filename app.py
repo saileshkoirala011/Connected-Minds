@@ -222,7 +222,21 @@ with col_graph:
         with tab_graph:
             # Show top files and packages as a text graph summary
             try:
+                from db import run_query
                 from queries import most_imported_files, list_vulnerabilities, find_circular_imports
+
+                # ── All files in the graph ──────────────────────────────
+                all_files = run_query(
+                    "MATCH (f:File {repo: $repo}) RETURN f.path AS path ORDER BY path",
+                    {"repo": current_repo},
+                )
+                st.markdown(f"**📁 Files in graph ({len(all_files)}):**")
+                if all_files:
+                    paths = [r["path"] for r in all_files]
+                    st.code("\n".join(paths), language=None)
+                else:
+                    st.info("No files ingested yet.")
+
                 top_files = most_imported_files(current_repo, limit=10)
                 cycles = find_circular_imports(current_repo, limit=10)
                 vulns = list_vulnerabilities(current_repo, limit=10)
