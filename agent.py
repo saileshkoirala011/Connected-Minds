@@ -150,7 +150,7 @@ def ask(question: str, repo: str) -> tuple[str, dict]:
         raise AgentError(f"Failed to create client: {e}") from e
 
     messages: list[dict] = [
-        {"role": "user", "content": question}
+        {"role": "user", "content": f"Repository to analyze: {repo}\n\n{question}"}
     ]
 
     tool_calls_made = 0
