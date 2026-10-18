@@ -53,6 +53,7 @@ def get_graph():
                 settings.falkordb_graph,
             )
         except Exception as exc:
+            _graph = None  # don't cache a failed connection
             raise GraphError(f"Cannot connect to FalkorDB: {exc}") from exc
     return _graph
 
